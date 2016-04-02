@@ -80,15 +80,20 @@ interface IMessage {
 	nickname: string;
 }
 interface ISettings {
-	readNickname: boolean,
+	readNickname: boolean;
+	readLikes: boolean;
 }
 let settings: ISettings = {
 	readNickname: false,
+	readLikes: false,
 };
 let ipcMain: IPCMain = require('electron').ipcMain;
 ipcMain.on("message", (event: IPCMainEvent, arg: string) => {
 	let messages: IMessage[] = JSON.parse(arg);
 	messages.forEach((message: IMessage) => {
+		if ((!settings.readLikes) && message.message === "Eねされました。") {
+			return;
+		}
 		let client: Socket = new net.Socket();
 		client.setEncoding('binary');
 		client.connect(50001, "localhost", () => {
