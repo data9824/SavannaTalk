@@ -1,0 +1,19 @@
+html {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+}
+
+webview {
+	height: calc(100% - 2em);
+}
+
+.urlText {
+	width: 40em;
+}
