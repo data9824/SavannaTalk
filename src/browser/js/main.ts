@@ -55,7 +55,7 @@ class LoginView extends Vue {
 			ipcRenderer.send("message", event.channel);
 		});
 		webview.addEventListener("did-stop-loading", () => {
-			// webview.openDevTools();
+//			webview.openDevTools();
 			let guestJs: string = `
 function getLikes() {
 	var likecnt = document.getElementById('likecnt');
@@ -75,23 +75,30 @@ window.setInterval(function() {
 	var children = chatOutput.children;
 	for (var i = 1; i < children.length; ++i) { // starts from 1 to skip the first welcome message
 		if (children.item(i).tagName.toLowerCase() === "dl") {
-			var dd = children.item(i).querySelector(".ps1");
+			var dd = children.item(i).querySelector("dd");
 			var dta = children.item(i).querySelector("dt a");
 			messages.push({
-				message: dd.innerText,
-				nickname: dta.innerText,
+				message: (dd === null) ? "コメントを読めません。" : dd.textContent,
+				nickname: (dta === null) ? "ニックネームを読めません。" : dta.textContent,
 			});
 		} else if (children.item(i).getAttribute("class") === "balloon_area") {
 			var text = children.item(i).querySelector(".bal_txt");
 			var strong = children.item(i).querySelector("strong");
-			messages.push({
-				message: text.textContent + ' ' + strong.textContent.replace(/\\(\\d+\\)$/, ""),
-				nickname: "",
-			});
+			if (text === null || strong === null) {
+				messages.push({
+					message: "星風船を読めません。",
+					nickname: "",
+				});
+			} else {
+				messages.push({
+					message: text.textContent + ' ' + strong.textContent.replace(/\\(\\d+\\)$/, ""),
+					nickname: "",
+				});
+			}
 		} else if (children.item(i).getAttribute("class") === "run_area") {
 			var box = children.item(i).querySelector(".box");
 			messages.push({
-				message: box.textContent,
+				message: (box === null) ? "メッセージを読めません。" : box.textContent,
 				nickname: "",
 			});
 		}
