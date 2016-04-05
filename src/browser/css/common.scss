@@ -1,4 +1,4 @@
-body, .mdl-layout-title, .mdl-textfield__input, .mdl-button {
+body, .mdl-layout-title, .mdl-textfield__input, .mdl-button, .mdl-snackbar__text {
 	font-family: "ヒラギノ角ゴ Pro W3", "Hiragino Kaku Gothic Pro", Osaka, "メイリオ", Meiryo, "ＭＳ Ｐゴシック", "MS PGothic", sans-serif;
 }
 
@@ -70,6 +70,19 @@ webview {
 	border-bottom: solid #cccccc 0.1em;
 }
 
+.chatLog .timestamp {
+	display: inline-block;
+	vertical-align: top;
+	word-break: break-all;
+	width: 5.5em;
+}
+
+.chatLog .image {
+	width: 1em;
+	height: 1em;
+	margin: 0 0.2em 0 0;
+}
+
 .chatLog .nickname {
 	display: inline-block;
 	vertical-align: top;
@@ -81,7 +94,7 @@ webview {
 	display: inline-block;
 	vertical-align: top;
 	word-break: break-all;
-	width: calc(100% - 10em);
+	width: calc(100% - 16.7em);
 }
 
 #settings-panel {

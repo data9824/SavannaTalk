@@ -89,6 +89,8 @@ interface IMessage {
 	type: string;
 	message: string;
 	nickname: string;
+	id: number;
+	timestamp: number;
 }
 interface IConfig {
 	version: number;
@@ -127,7 +129,11 @@ ipcMain.on("message", (event: IPCMainEvent, arg: string) => {
 		});
 		client.connect(50001, "localhost", () => {
 			let text: string = message.message;
-			text = text.replace(/https?:\/\/[\-_\.!~*'\(\)a-zA-Z0-9;/\?:@&=\+\$,%#]+/g, "(URL省略)");
+			if (message.type === MESSAGE_TYPE_LIKES) {
+				text = "Eねされました。";
+			} else {
+				text = text.replace(/https?:\/\/[\-_\.!~*'\(\)a-zA-Z0-9;/\?:@&=\+\$,%#]+/g, "(URL省略)");
+			}
 			if (config.readNickname) {
 				text += " " + message.nickname;
 			}

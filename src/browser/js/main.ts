@@ -8,6 +8,7 @@ import * as $ from 'jquery';
 import * as electron from 'electron';
 import IpcRenderer = Electron.IpcRenderer;
 declare var componentHandler: any;
+let dateFormat: Function = require('dateformat');
 
 Vue.use(VueRouter);
 let appRouter: any = new VueRouter();
@@ -24,6 +25,8 @@ interface IMessage {
 	type: string;
 	message: string;
 	nickname: string;
+	id: number;
+	timestamp: number;
 }
 
 interface IConfig {
@@ -160,6 +163,9 @@ class LoginView extends Vue {
 	}
 	public onPost(): void {
 		let webview: any = this.$els['webview'];
+		if (this.post === "") {
+			return;
+		}
 		let guestJs: string = `
 			(function() {
 				var iframe = document.getElementById('frameChat');
@@ -234,6 +240,7 @@ var savannaTalkIpcRenderer = require('electron').ipcRenderer;
 var savannaTalkMessages = [];
 var savannaTalkLikes = getLikes();
 window.setInterval(function() {
+	var now = Date.now();
 	var iframe = document.getElementById('frameChat');
 	var messages = [];
 	var chatOutput = iframe.contentWindow.document.querySelector("#chatOutput");
@@ -246,6 +253,7 @@ window.setInterval(function() {
 				type: "message",
 				message: (dd === null) ? "コメントを読めません。" : dd.textContent,
 				nickname: (dta === null) ? "ニックネームを読めません。" : dta.textContent,
+				id: (dta === null || !dta.hasAttribute("data-id")) ? null : parseInt(dta.getAttribute("data-id"), 10),
 			});
 		} else if (children.item(i).getAttribute("class") === "balloon_area") {
 			var text = children.item(i).querySelector(".bal_txt");
@@ -255,12 +263,14 @@ window.setInterval(function() {
 					type: "balloon",
 					message: "星風船を読めません。",
 					nickname: "",
+					id: null,
 				});
 			} else {
 				messages.push({
 					type: "balloon",
 					message: text.textContent + ' ' + strong.textContent.replace(/\\(\\d+\\)$/, ""),
 					nickname: "",
+					id: null,
 				});
 			}
 		} else if (children.item(i).getAttribute("class") === "run_area") {
@@ -269,23 +279,27 @@ window.setInterval(function() {
 				type: "announce",
 				message: (box === null) ? "メッセージを読めません。" : box.textContent,
 				nickname: "",
+				id: null,
 			});
 		}
 	}
 	var newMessages = [];
 	for (var i = savannaTalkMessages.length; i < messages.length; ++i) {
+		messages[i].timestamp = now;
 		newMessages.push(messages[i]);
 	}
 	var specialMessages = [];
 	var newLikes = getLikes();
 	if (savannaTalkLikes < newLikes) {
-		savannaTalkLikes = newLikes;
 		specialMessages.push({
 			type: "likes",
-			message: "Eねされました。",
+			message: "いいねされました。",
 			nickname: "",
+			id: null,
+			timestamp: now,
 		});
 	}
+	savannaTalkLikes = newLikes;
 	savannaTalkIpcRenderer.sendToHost(JSON.stringify(newMessages.concat(specialMessages)));
 	savannaTalkMessages = savannaTalkMessages.concat(newMessages);
 }, 100);
@@ -318,11 +332,22 @@ window.setInterval(function() {
 	};
 	private addMessageLog(message: IMessage): void {
 		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
-		$(chatLogs).append('<div class="chatLog"><div class="nickname">'
+		let chatLog: JQuery = $('<div class="chatLog"><div class="timestamp">'
+			+ dateFormat(new Date(message.timestamp), "hh:MM:ss")
+			+ '</div><img class="image"><div class="nickname">'
 			+ this.escapeHTML(message.nickname)
 			+ '</div><div class="message">'
 			+ this.escapeHTML(message.message)
 			+ '</div></div>');
+		let img: HTMLImageElement = chatLog.find(".image")[0] as HTMLImageElement;
+		if (message.id !== null) {
+			img.addEventListener("error", () => {
+				img.src = "";
+			});
+			let dir: number = ~~Math.floor(message.id / 1000000);
+			img.src = "http://usercontents.afreecatv.jp/LOGO/channel/" + dir + "/" + message.id + "/" + message.id + ".jpg";
+		}
+		$(chatLogs).append(chatLog);
 		if (this.autoScroll) {
 			let now: number = Date.now();
 			this.scrollStartTime = now;
