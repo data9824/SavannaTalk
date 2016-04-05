@@ -15,8 +15,11 @@ body {
 }
 
 .urlText {
-	width: 20em;
-	margin: -20px 0;
+	width: 16em;
+}
+
+.mdl-textfield {
+	padding: 0;
 }
 
 .mainTabBar {
@@ -44,6 +47,41 @@ webview {
 
 .readChat {
 	width: 10em;
+}
+
+#chat-panel {
+	height: 100%;
+}
+
+.chatLogs {
+	height: calc(100% - 3em);
+	overflow-y: scroll;
+}
+
+.postForm {
+	height: 3em;
+}
+
+.postText {
+	width: calc(100% - 8em);
+}
+
+.chatLog {
+	border-bottom: solid #cccccc 0.1em;
+}
+
+.chatLog .nickname {
+	display: inline-block;
+	vertical-align: top;
+	word-break: break-all;
+	width: 10em;
+}
+
+.chatLog .message {
+	display: inline-block;
+	vertical-align: top;
+	word-break: break-all;
+	width: calc(100% - 10em);
 }
 
 #settings-panel {

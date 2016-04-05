@@ -14,6 +14,18 @@ let appRouter: any = new VueRouter();
 let ipcRenderer: IpcRenderer = electron.ipcRenderer;
 let clipboard: Electron.Clipboard = electron.clipboard;
 
+const MESSAGE_TYPE_MESSAGE: string = "message";
+const MESSAGE_TYPE_BALLOON: string = "balloon";
+const MESSAGE_TYPE_ANNOUNCE: string = "announce";
+const MESSAGE_TYPE_LIKES: string = "likes";
+const scrollDuration: number = 100;
+
+interface IMessage {
+	type: string;
+	message: string;
+	nickname: string;
+}
+
 interface IConfig {
 	version: number;
 	channelUrl: string;
@@ -43,11 +55,30 @@ interface IConfig {
 		<div class="mainTab mdl-tabs mdl-js-tabs mdl-js-ripple-effect">
 			<div class="mainTabBar mdl-tabs__tab-bar">
 				<a href="#broadcast-panel" class="mdl-tabs__tab is-active">放送</a>
+				<a href="#chat-panel" class="mdl-tabs__tab">チャット</a>
 				<a href="#settings-panel" class="mdl-tabs__tab">設定</a>
 			</div>
 
 			<div class="mdl-tabs__panel is-active" id="broadcast-panel">
 				<webview v-el:webview plugins nodeintegration></webview>
+			</div>
+			<div class="mdl-tabs__panel" id="chat-panel">
+				<div class="chatLogs" v-el:chatlogs>
+				</div>
+				<div class="postForm">
+					<form v-on:submit.prevent="onPost">
+						<div class="postText mdl-textfield mdl-js-textfield">
+							<input class="mdl-textfield__input" type="text" placeholder="投稿内容" id="post" v-model="post">
+							<label class="mdl-textfield__label" for="post"></label>
+						</div>
+						<input type="submit" value="投稿" class="mdl-button mdl-js-button mdl-js-ripple-effect">
+						<label class="mdl-icon-toggle mdl-js-icon-toggle mdl-js-ripple-effect" for="autoScrollCheck" id="autoScrollCheckLabel">
+							<input type="checkbox" id="autoScrollCheck" class="mdl-icon-toggle__input" checked v-model="autoScroll">
+							<i class="mdl-icon-toggle__label material-icons">play_arrow</i>
+						</label>
+						<div class="mdl-tooltip mdl-tooltip--top" for="autoScrollCheckLabel">自動スクロール</div>
+					</form>
+				</div>
 			</div>
 			<div class="mdl-tabs__panel" id="settings-panel">
 				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="readMessage">
@@ -86,6 +117,13 @@ class LoginView extends Vue {
 	private readAnnounce: boolean;
 	private readNickname: boolean;
 	private readLikes: boolean;
+	private post: string;
+	private autoScroll: boolean;
+	private scrollStartTime: number;
+	private scrollStartPosition: number;
+	private scrollEndTime: number;
+	private scrollEndPosition: number;
+	private scrollTimerId: number = undefined;
 	public data(): any {
 		return {
 			channelUrl: '',
@@ -95,6 +133,8 @@ class LoginView extends Vue {
 			readAnnounce: false,
 			readNickname: false,
 			readLikes: false,
+			post: "",
+			autoScroll: true,
 		};
 	}
 	public onPaste(): void {
@@ -117,6 +157,30 @@ class LoginView extends Vue {
 		this.changeConfig();
 		let webview: any = this.$els['webview'];
 		webview.setAttribute("src", this.channelUrl);
+	}
+	public onPost(): void {
+		let webview: any = this.$els['webview'];
+		let guestJs: string = `
+			(function() {
+				var iframe = document.getElementById('frameChat');
+				if (!iframe) {
+					window.alert("frameChatが見つかりません。");
+					return;
+				}
+				var input = iframe.contentWindow.document.getElementById("input");
+				if (!input) {
+					window.alert("inputが見つかりません。");
+					return;
+				}
+				input.textContent = "` + this.escapeJs(this.post) + `";
+				var event = {
+					preventDefault: function() {}
+				};
+				iframe.contentWindow.chatInterface.onsubmit(event);
+			})();
+		`;
+		webview.executeJavaScript(guestJs);
+		this.post = "";
 	}
 	public attached(): void {
 		componentHandler.upgradeDom();
@@ -147,7 +211,11 @@ class LoginView extends Vue {
 		});
 		ipcRenderer.send("getConfig");
 		let webview: any = this.$els['webview'];
-		webview.addEventListener('ipc-message', function(event: any) {
+		webview.addEventListener('ipc-message', (event: any) => {
+			let messages: IMessage[] = JSON.parse(event.channel);
+			messages.forEach((message: IMessage) => {
+				this.addMessageLog(message);
+			});
 			ipcRenderer.send("message", event.channel);
 		});
 		webview.addEventListener("did-stop-loading", () => {
@@ -220,7 +288,7 @@ window.setInterval(function() {
 	}
 	savannaTalkIpcRenderer.sendToHost(JSON.stringify(newMessages.concat(specialMessages)));
 	savannaTalkMessages = savannaTalkMessages.concat(newMessages);
-}, 200);
+}, 100);
 `;
 			webview.executeJavaScript(guestJs);
 		});
@@ -229,6 +297,55 @@ window.setInterval(function() {
 	}
 	private updateCheck(element: HTMLElement, checked: boolean): void {
 		(element.parentElement as any).MaterialCheckbox[checked ? "check" : "uncheck"]();
+	}
+	private escapeHTML(str: string): string {
+		return str.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+	}
+	private escapeJs(str: string): string {
+		return str
+			.replace(/\\/g, '\\\\')
+			.replace(/'/g, "\\'")
+			.replace(/"/g, '\\"')
+			.replace(/\//g, '\\/')
+			.replace(/</g, '\\x3c')
+			.replace(/>/g, '\\x3e')
+			.replace(/(0x0D)/g, '\r')
+			.replace(/(0x0A)/g, '\n');
+	};
+	private addMessageLog(message: IMessage): void {
+		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
+		$(chatLogs).append('<div class="chatLog"><div class="nickname">'
+			+ this.escapeHTML(message.nickname)
+			+ '</div><div class="message">'
+			+ this.escapeHTML(message.message)
+			+ '</div></div>');
+		if (this.autoScroll) {
+			let now: number = Date.now();
+			this.scrollStartTime = now;
+			this.scrollStartPosition = chatLogs.scrollTop;
+			this.scrollEndTime = now + scrollDuration;
+			this.scrollEndPosition = chatLogs.scrollHeight - chatLogs.clientHeight;
+			if (this.scrollTimerId === undefined) {
+				this.scrollTimerId = window.setTimeout(this.onScroll.bind(this), 10);
+			}
+		}
+	}
+	private onScroll(): void {
+		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
+		let now: number = Date.now();
+		let elapsed: number = Math.max(0, Math.min(now - this.scrollStartTime, scrollDuration));
+		let currentPosition: number = this.scrollStartPosition
+			+ ~~((this.scrollEndPosition - this.scrollStartPosition) * elapsed / scrollDuration);
+		chatLogs.scrollTop = currentPosition;
+		if (elapsed < scrollDuration) {
+			this.scrollTimerId = window.setTimeout(this.onScroll.bind(this), 10);
+		} else {
+			this.scrollTimerId = undefined;
+		}
 	}
 }
 @VueComponent({})

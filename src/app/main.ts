@@ -127,6 +127,7 @@ ipcMain.on("message", (event: IPCMainEvent, arg: string) => {
 		});
 		client.connect(50001, "localhost", () => {
 			let text: string = message.message;
+			text = text.replace(/https?:\/\/[\-_\.!~*'\(\)a-zA-Z0-9;/\?:@&=\+\$,%#]+/g, "(URL省略)");
 			if (config.readNickname) {
 				text += " " + message.nickname;
 			}
