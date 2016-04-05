@@ -1,3 +1,7 @@
+body, .mdl-layout-title, .mdl-textfield__input, .mdl-button {
+	font-family: "ヒラギノ角ゴ Pro W3", "Hiragino Kaku Gothic Pro", Osaka, "メイリオ", Meiryo, "ＭＳ Ｐゴシック", "MS PGothic", sans-serif;
+}
+
 html {
 	margin: 0;
 	padding: 0;
@@ -10,10 +14,38 @@ body {
 	height: 100%;
 }
 
-webview {
-	height: calc(100% - 2em);
-}
-
 .urlText {
 	width: 20em;
+	margin: -20px 0;
+}
+
+.mainTabBar {
+	-webkit-justify-content: flex-end;
+	justify-content: flex-end;
+}
+
+.urlBar {
+	position: absolute;
+	left: 0;
+	top: 8px;
+}
+
+.mainTab {
+	height: calc(100% - 50px);
+}
+
+#broadcast-panel {
+	height: 100%;
+}
+
+webview {
+	height: 100%;
+}
+
+.readChat {
+	width: 10em;
+}
+
+#settings-panel {
+	margin: 1em;
 }
