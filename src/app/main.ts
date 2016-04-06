@@ -57,19 +57,29 @@ function getConfigFileName(): string {
 	return app.getPath('userData') + "/config.json";
 }
 
-let flashPlayerDll: string = findFile("C:/Program Files (x86)/Google/Chrome", "pepflashplayer.dll");
-if (flashPlayerDll === undefined) {
-	dialog.showErrorBox("エラー", "pepflashplayer.dll が C:/Program Files (x86)/Google/Chrome 以下に見つかりません。");
-	app.quit();
+if (process.platform === "darwin") {
+	let flashPlayerDll: string = findFile("/Applications//Google Chrome.app/Contents/Versions", "PepperFlashPlayer");
+	if (flashPlayerDll === undefined) {
+		dialog.showErrorBox("エラー", "PepperFlashPlayer が /Applications//Google Chrome.app/Contents/Versions 以下に見つかりません。");
+		app.quit();
+	}
+	app.commandLine.appendSwitch('ppapi-flash-path', flashPlayerDll);
+} else {
+	let flashPlayerDll: string = findFile("C:/Program Files (x86)/Google/Chrome", "pepflashplayer.dll");
+	if (flashPlayerDll === undefined) {
+		dialog.showErrorBox("エラー", "pepflashplayer.dll が C:/Program Files (x86)/Google/Chrome 以下に見つかりません。");
+		app.quit();
+	}
+	let manifestJson: string = flashPlayerDll.replace(/[^\\/]+$/, "manifest.json");
+	let manifest: any = JSON.parse(fs.readFileSync(manifestJson, "utf8"));
+	if (manifest["x-ppapi-arch"] !== "x64") {
+		dialog.showErrorBox("エラー", "64ビット版のChromeがインストールされていません。");
+		app.quit();
+	}
+	app.commandLine.appendSwitch('ppapi-flash-path', flashPlayerDll);
+	app.commandLine.appendSwitch('ppapi-flash-version', manifest["version"]);
 }
-let manifestJson: string = flashPlayerDll.replace(/[^\\/]+$/, "manifest.json");
-let manifest: any = JSON.parse(fs.readFileSync(manifestJson, "utf8"));
-if (manifest["x-ppapi-arch"] !== "x64") {
-	dialog.showErrorBox("エラー", "64ビット版のChromeがインストールされていません。");
-	app.quit();
-}
-app.commandLine.appendSwitch('ppapi-flash-path', flashPlayerDll);
-app.commandLine.appendSwitch('ppapi-flash-version', manifest["version"]);
+
 app.on('ready', createWindow);
 app.on('window-all-closed', () => {
 	if (process.platform !== 'darwin') {
