@@ -9,13 +9,13 @@ rm -rf pack/SavannaTalk-win32-x64/
     --ignore=node_modules/gulp-typescript \
     --ignore=node_modules/gulp-webpack \
     --ignore=node_modules/webpack \
+		--icon=resources/app.ico \
     --version-string.FileDescription=SavannaTalk \
     --version-string.ProductName=SavannaTalk \
     --version-string.OriginalFilename=SavannaTalk.exe \
     --version-string.LegalCopyright="CC0 1.0 Universal" \
     --out pack --overwrite
 cp package.json pack/SavannaTalk-win32-x64/resources/app/
-cp resources/README.txt pack/SavannaTalk-win32-x64/
 # 壊れたZIPファイルが生成されてしまう
 # pushd .
 # cd pack/

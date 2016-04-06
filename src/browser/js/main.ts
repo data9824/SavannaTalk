@@ -330,10 +330,13 @@ window.setInterval(function() {
 			.replace(/(0x0D)/g, '\r')
 			.replace(/(0x0A)/g, '\n');
 	};
+	private getDefaultIconUrl(): string {
+		return "images/transparent.png";
+	}
 	private addMessageLog(message: IMessage): void {
 		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
 		let chatLog: JQuery = $('<div class="chatLog"><div class="timestamp">'
-			+ dateFormat(new Date(message.timestamp), "hh:MM:ss")
+			+ dateFormat(new Date(message.timestamp), "HH:MM:ss")
 			+ '</div><img class="image"><div class="nickname">'
 			+ this.escapeHTML(message.nickname)
 			+ '</div><div class="message">'
@@ -342,10 +345,12 @@ window.setInterval(function() {
 		let img: HTMLImageElement = chatLog.find(".image")[0] as HTMLImageElement;
 		if (message.id !== null) {
 			img.addEventListener("error", () => {
-				img.src = "";
+				img.src = this.getDefaultIconUrl();
 			});
 			let dir: number = ~~Math.floor(message.id / 1000000);
 			img.src = "http://usercontents.afreecatv.jp/LOGO/channel/" + dir + "/" + message.id + "/" + message.id + ".jpg";
+		} else {
+			img.src = this.getDefaultIconUrl();
 		}
 		$(chatLogs).append(chatLog);
 		if (this.autoScroll) {
