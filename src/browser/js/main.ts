@@ -373,13 +373,6 @@ window.setInterval(function() {
 	private updateCheck(element: HTMLElement, checked: boolean): void {
 		(element.parentElement as any).MaterialCheckbox[checked ? "check" : "uncheck"]();
 	}
-	private escapeHTML(str: string): string {
-		return str.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;')
-			.replace(/'/g, '&#039;');
-	}
 	private escapeJs(str: string): string {
 		return str
 			.replace(/\\/g, '\\\\')
@@ -396,14 +389,14 @@ window.setInterval(function() {
 	}
 	private addMessageLog(message: IMessage): void {
 		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
-		let chatLog: JQuery = $('<div class="chatLog"><div class="timestamp">'
-			+ dateFormat(new Date(message.timestamp), "HH:MM:ss")
-			+ '</div><img class="image"><div class="nickname">'
-			+ this.escapeHTML(message.nickname)
-			+ '</div><div class="message">'
-			+ this.escapeHTML(message.message)
-			+ '</div></div>');
-		let img: HTMLImageElement = chatLog.find(".image")[0] as HTMLImageElement;
+		let chatLog: HTMLDivElement = document.createElement("div");
+		chatLog.setAttribute("class", "chatLog");
+		let timestamp: HTMLDivElement = document.createElement("div");
+		timestamp.setAttribute("class", "timestamp");
+		timestamp.appendChild(document.createTextNode(dateFormat(new Date(message.timestamp), "HH:MM:ss")));
+		chatLog.appendChild(timestamp);
+		let img: HTMLImageElement = document.createElement("img");
+		img.setAttribute("class", "image");
 		if (message.id !== null) {
 			img.addEventListener("error", () => {
 				img.src = this.getDefaultIconUrl();
@@ -413,7 +406,43 @@ window.setInterval(function() {
 		} else {
 			img.src = this.getDefaultIconUrl();
 		}
-		$(chatLogs).append(chatLog);
+		chatLog.appendChild(img);
+		let nickname: HTMLDivElement = document.createElement("div");
+		nickname.setAttribute("class", "nickname");
+		nickname.appendChild(document.createTextNode(message.nickname));
+		chatLog.appendChild(nickname);
+		let messageEl: HTMLDivElement = document.createElement("div");
+		messageEl.setAttribute("class", "message");
+		let text: string = message.message;
+		while (text.length > 0) {
+			(function() {
+				let match: RegExpMatchArray = text.match(/https?:\/\/[\-_\.!~*'\(\)a-zA-Z0-9;/\?:@&=\+\$,%#]+/);
+				if (match === null) {
+					messageEl.appendChild(document.createTextNode(text));
+					text = "";
+				} else {
+					messageEl.appendChild(document.createTextNode(text.substr(0, match.index)));
+					let span: HTMLSpanElement = document.createElement("span");
+					span.setAttribute("class", "chatLogUrl");
+					span.appendChild(document.createTextNode(match[0]));
+					span.addEventListener("click", (event: MouseEvent) => {
+						event.preventDefault();
+						let menu: Electron.Menu = new electron.remote.Menu();
+						menu.append(new electron.remote.MenuItem({
+							label: "コピー",
+							click: () => {
+								electron.clipboard.writeText(match[0], "selection");
+							},
+						}));
+						menu.popup(electron.remote.getCurrentWindow());
+					});
+					messageEl.appendChild(span);
+					text = text.substr(match.index + match[0].length);
+				}
+			})();
+		}
+		chatLog.appendChild(messageEl);
+		chatLogs.appendChild(chatLog);
 		if (this.autoScroll) {
 			let now: number = Date.now();
 			this.scrollStartTime = now;

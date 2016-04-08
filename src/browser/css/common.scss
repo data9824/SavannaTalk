@@ -97,6 +97,15 @@ webview {
 	width: calc(100% - 16.7em);
 }
 
+.chatLog .chatLogUrl {
+	background-color: #b8d1ed;
+	margin: 0 0.2em;
+	border-radius: 0.2em;
+	font-size: 90%;
+	font-weight: bold;
+	cursor: pointer;
+}
+
 #settings-panel {
 	margin: 1em;
 }
