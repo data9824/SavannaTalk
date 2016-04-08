@@ -127,6 +127,7 @@ class LoginView extends Vue {
 	private scrollEndTime: number;
 	private scrollEndPosition: number;
 	private scrollTimerId: number = undefined;
+	private errorTimerId: number = undefined;
 	public data(): any {
 		return {
 			channelUrl: '',
@@ -142,6 +143,7 @@ class LoginView extends Vue {
 	}
 	public onPaste(): void {
 		this.channelUrl = clipboard.readText("selection").trim();
+		this.changeConfig();
 	}
 	public changeConfig(): void {
 		let config: IConfig = {
@@ -207,24 +209,18 @@ class LoginView extends Vue {
 			this.updateCheck(document.getElementById("readLikes"), this.readLikes);
 		});
 		ipcRenderer.on("error", (e: any, arg: string) => {
-			let snackbarContainer: any = document.getElementById("toastContainer");
-			if (snackbarContainer.MaterialSnackbar.queuedNotifications_.length === 0) {
-				snackbarContainer.MaterialSnackbar.showSnackbar({
-					message: arg,
-					timeout: 5000,
-				});
-			}
+			this.showErrorMessage(arg);
 		});
 		ipcRenderer.send("getConfig");
 		let webview: any = this.$els['webview'];
 		webview.addEventListener('ipc-message', (event: any) => {
-			let messages: IMessage[] = JSON.parse(event.channel);
+			let messages: IMessage[] = JSON.parse(event.args[0]);
 			messages.forEach((message: IMessage) => {
 				this.addMessageLog(message);
 			});
-			ipcRenderer.send("message", event.channel);
+			ipcRenderer.send("message", event.args[0]);
 		});
-		webview.addEventListener("did-stop-loading", () => {
+		webview.addEventListener("did-finish-load", () => {
 			// webview.openDevTools();
 			let guestJs: string = `
 function getLikes() {
@@ -242,6 +238,9 @@ var savannaTalkLikes = getLikes();
 window.setInterval(function() {
 	var now = Date.now();
 	var iframe = document.getElementById('frameChat');
+	if (iframe === null) {
+		return;
+	}
 	var messages = [];
 	var chatOutput = iframe.contentWindow.document.querySelector("#chatOutput");
 	var children = chatOutput.children;
@@ -283,6 +282,10 @@ window.setInterval(function() {
 			});
 		}
 	}
+	if (savannaTalkMessages.length > messages.length) {
+		// 放送が再開された場合は、コメント欄がクリアされるので、 savannaTalkMessages もクリアする。
+		savannaTalkMessages.length = 0;
+	}
 	var newMessages = [];
 	for (var i = savannaTalkMessages.length; i < messages.length; ++i) {
 		messages[i].timestamp = now;
@@ -300,14 +303,46 @@ window.setInterval(function() {
 		});
 	}
 	savannaTalkLikes = newLikes;
-	savannaTalkIpcRenderer.sendToHost(JSON.stringify(newMessages.concat(specialMessages)));
+	savannaTalkIpcRenderer.sendToHost("message", JSON.stringify(newMessages.concat(specialMessages)));
 	savannaTalkMessages = savannaTalkMessages.concat(newMessages);
 }, 100);
 `;
 			webview.executeJavaScript(guestJs);
+			if (this.errorTimerId !== undefined) {
+				clearTimeout(this.errorTimerId);
+				this.errorTimerId = undefined;
+			}
+		});
+		webview.addEventListener("did-navigate", (event: any) => {
+			this.updateUrl(event.url);
+		});
+		webview.addEventListener("did-navigate-in-page", (event: any) => {
+			// for redirect
+			this.updateUrl(event.url);
 		});
 	}
 	public detached(): void {
+	}
+	private updateUrl(url: string): void {
+		this.channelUrl = url;
+		this.changeConfig();
+		if (this.errorTimerId !== undefined) {
+			clearTimeout(this.errorTimerId);
+			this.errorTimerId = undefined;
+		}
+		this.errorTimerId = setTimeout(this.showLoadError.bind(this), 5000);
+	}
+	private showLoadError(): void {
+		this.showErrorMessage("チャットを読み込めません。OKボタンを押してリロードしてみてください。");
+	}
+	private showErrorMessage(text: string): void {
+		let snackbarContainer: any = document.getElementById("toastContainer");
+		if (snackbarContainer.MaterialSnackbar.queuedNotifications_.length === 0) {
+			snackbarContainer.MaterialSnackbar.showSnackbar({
+				message: text,
+				timeout: 5000,
+			});
+		}
 	}
 	private updateCheck(element: HTMLElement, checked: boolean): void {
 		(element.parentElement as any).MaterialCheckbox[checked ? "check" : "uncheck"]();
