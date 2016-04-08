@@ -40,6 +40,22 @@ interface IConfig {
 	readLikes: boolean;
 }
 
+class Channel {
+	public messages: IMessage[] = [];
+}
+
+class AppModel {
+	private channels: Channel[] = [];
+	public getChannel(url: string): Channel {
+		if (!(url in this.channels)) {
+			this.channels[url] = new Channel();
+		}
+		return this.channels[url];
+	}
+}
+
+let appModel: AppModel = new AppModel();
+
 @VueComponent({
 	template: `
 		<div class="urlBar">
@@ -216,12 +232,14 @@ class LoginView extends Vue {
 		webview.addEventListener('ipc-message', (event: any) => {
 			let messages: IMessage[] = JSON.parse(event.args[0]);
 			messages.forEach((message: IMessage) => {
+				appModel.getChannel(webview.getURL()).messages.push(message);
 				this.addMessageLog(message);
 			});
 			ipcRenderer.send("message", event.args[0]);
 		});
 		webview.addEventListener("did-finish-load", () => {
 			// webview.openDevTools();
+			this.updateChatLogs(webview.getURL());
 			let guestJs: string = `
 function getLikes() {
 	var likecnt = document.getElementById('likecnt');
@@ -331,6 +349,14 @@ window.setInterval(function() {
 			this.errorTimerId = undefined;
 		}
 		this.errorTimerId = setTimeout(this.showLoadError.bind(this), 5000);
+	}
+	private updateChatLogs(url: string): void {
+		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
+		chatLogs.innerHTML = "";
+		let channel: Channel = appModel.getChannel(url);
+		for (let i: number = 0; i < channel.messages.length; ++i) {
+			this.addMessageLog(channel.messages[i]);
+		}
 	}
 	private showLoadError(): void {
 		this.showErrorMessage("チャットを読み込めません。OKボタンを押してリロードしてみてください。");
