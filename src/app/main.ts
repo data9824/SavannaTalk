@@ -10,9 +10,44 @@ import {Stats} from "fs";
 import * as net from "net";
 import * as fs from "fs";
 
+interface IMessage {
+	type: string;
+	message: string;
+	nickname: string;
+	id: number;
+	timestamp: number;
+}
+
+interface IConfig {
+	version: number;
+	channelUrl: string;
+	readChat: boolean;
+	readMessage: boolean;
+	readBalloon: boolean;
+	readAnnounce: boolean;
+	readNickname: boolean;
+	readLikes: boolean;
+}
+
+const MESSAGE_TYPE_MESSAGE: string = "message";
+const MESSAGE_TYPE_BALLOON: string = "balloon";
+const MESSAGE_TYPE_ANNOUNCE: string = "announce";
+const MESSAGE_TYPE_LIKES: string = "likes";
+const defaultConfig: IConfig = {
+	version: 1,
+	channelUrl: "",
+	readChat: true,
+	readMessage: true,
+	readBalloon: true,
+	readAnnounce: true,
+	readNickname: false,
+	readLikes: true,
+};
 let app: Electron.App = electron.app;
 let dialog: Electron.Dialog = electron.dialog;
+let ipcMain: IPCMain = electron.ipcMain;
 let mainWindow: BrowserWindow = undefined;
+let config: IConfig;
 
 function createWindow() {
 	'use strict';
@@ -79,7 +114,6 @@ if (process.platform === "darwin") {
 	app.commandLine.appendSwitch('ppapi-flash-path', flashPlayerDll);
 	app.commandLine.appendSwitch('ppapi-flash-version', manifest["version"]);
 }
-
 app.on('ready', createWindow);
 app.on('window-all-closed', () => {
 	if (process.platform !== 'darwin') {
@@ -91,29 +125,6 @@ app.on('activate', () => {
 		createWindow();
 	}
 });
-const MESSAGE_TYPE_MESSAGE: string = "message";
-const MESSAGE_TYPE_BALLOON: string = "balloon";
-const MESSAGE_TYPE_ANNOUNCE: string = "announce";
-const MESSAGE_TYPE_LIKES: string = "likes";
-interface IMessage {
-	type: string;
-	message: string;
-	nickname: string;
-	id: number;
-	timestamp: number;
-}
-interface IConfig {
-	version: number;
-	channelUrl: string;
-	readChat: boolean;
-	readMessage: boolean;
-	readBalloon: boolean;
-	readAnnounce: boolean;
-	readNickname: boolean;
-	readLikes: boolean;
-}
-let config: IConfig;
-let ipcMain: IPCMain = electron.ipcMain;
 ipcMain.on("message", (event: IPCMainEvent, arg: string) => {
 	let messages: IMessage[] = JSON.parse(arg);
 	messages.forEach((message: IMessage) => {
@@ -170,16 +181,6 @@ ipcMain.on("setConfig", (event: IPCMainEvent, arg: string) => {
 ipcMain.on("getConfig", (event: IPCMainEvent) => {
 	event.sender.send("getConfig", JSON.stringify(config));
 });
-const defaultConfig: IConfig = {
-	version: 1,
-	channelUrl: "",
-	readChat: true,
-	readMessage: true,
-	readBalloon: true,
-	readAnnounce: true,
-	readNickname: false,
-	readLikes: true,
-};
 try {
 	let configText: string = fs.readFileSync(getConfigFileName(), "utf8");
 	config = _.defaults<IConfig, IConfig>(JSON.parse(configText), defaultConfig);
