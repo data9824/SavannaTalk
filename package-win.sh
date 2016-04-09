@@ -16,6 +16,7 @@ rm -rf pack/SavannaTalk-win32-x64/
     --version-string.LegalCopyright="CC0 1.0 Universal" \
     --out pack --overwrite
 cp package.json pack/SavannaTalk-win32-x64/resources/app/
+cp -r node_modules/sqlite3/ pack/SavannaTalk-win32-x64/resources/app/node_modules/
 # 壊れたZIPファイルが生成されてしまう
 # pushd .
 # cd pack/

@@ -15,18 +15,19 @@ let appRouter: any = new VueRouter();
 let ipcRenderer: IpcRenderer = electron.ipcRenderer;
 let clipboard: Electron.Clipboard = electron.clipboard;
 
-const MESSAGE_TYPE_MESSAGE: string = "message";
-const MESSAGE_TYPE_BALLOON: string = "balloon";
-const MESSAGE_TYPE_ANNOUNCE: string = "announce";
-const MESSAGE_TYPE_LIKES: string = "likes";
+const MESSAGE_TYPE_MESSAGE: number = 1;
+const MESSAGE_TYPE_BALLOON: number = 2;
+const MESSAGE_TYPE_ANNOUNCE: number = 3;
+const MESSAGE_TYPE_LIKES: number = 4;
 const scrollDuration: number = 100;
 
 interface IMessage {
-	type: string;
+	channelId: number;
+	timestamp: number;
+	type: number;
 	message: string;
 	nickname: string;
-	id: number;
-	timestamp: number;
+	userId: number;
 }
 
 interface IConfig {
@@ -40,21 +41,15 @@ interface IConfig {
 	readLikes: boolean;
 }
 
-class Channel {
-	public messages: IMessage[] = [];
-}
-
-class AppModel {
-	private channels: Channel[] = [];
-	public getChannel(url: string): Channel {
-		if (!(url in this.channels)) {
-			this.channels[url] = new Channel();
-		}
-		return this.channels[url];
+function getChannelIdFromUrl(url: string): number {
+	'use strict';
+	let channelId: number = undefined;
+	let match: RegExpMatchArray = url.match(/(\d+)#?.*$/);
+	if (match) {
+		channelId = parseInt(match[1], 10);
 	}
+	return channelId;
 }
-
-let appModel: AppModel = new AppModel();
 
 @VueComponent({
 	template: `
@@ -224,6 +219,11 @@ class LoginView extends Vue {
 			this.updateCheck(document.getElementById("readNickname"), this.readNickname);
 			this.updateCheck(document.getElementById("readLikes"), this.readLikes);
 		});
+		ipcRenderer.on("getChatLogs", (e: any, arg: string) => {
+			let message: IMessage = JSON.parse(arg);
+			// TODO: check channel
+			this.addMessageLog(message);
+		});
 		ipcRenderer.on("error", (e: any, arg: string) => {
 			this.showErrorMessage(arg);
 		});
@@ -232,7 +232,6 @@ class LoginView extends Vue {
 		webview.addEventListener('ipc-message', (event: any) => {
 			let messages: IMessage[] = JSON.parse(event.args[0]);
 			messages.forEach((message: IMessage) => {
-				appModel.getChannel(webview.getURL()).messages.push(message);
 				this.addMessageLog(message);
 			});
 			ipcRenderer.send("message", event.args[0]);
@@ -267,36 +266,36 @@ window.setInterval(function() {
 			var dd = children.item(i).querySelector("dd");
 			var dta = children.item(i).querySelector("dt a");
 			messages.push({
-				type: "message",
+				type: ` + MESSAGE_TYPE_MESSAGE + `,
 				message: (dd === null) ? "コメントを読めません。" : dd.textContent,
 				nickname: (dta === null) ? "ニックネームを読めません。" : dta.textContent,
-				id: (dta === null || !dta.hasAttribute("data-id")) ? null : parseInt(dta.getAttribute("data-id"), 10),
+				userId: (dta === null || !dta.hasAttribute("data-id")) ? undefined : parseInt(dta.getAttribute("data-id"), 10),
 			});
 		} else if (children.item(i).getAttribute("class") === "balloon_area") {
 			var text = children.item(i).querySelector(".bal_txt");
 			var strong = children.item(i).querySelector("strong");
 			if (text === null || strong === null) {
 				messages.push({
-					type: "balloon",
+					type: ` + MESSAGE_TYPE_BALLOON + `,
 					message: "星風船を読めません。",
 					nickname: "",
-					id: null,
+					userId: undefined,
 				});
 			} else {
 				messages.push({
-					type: "balloon",
-					message: text.textContent + ' ' + strong.textContent.replace(/\\(\\d+\\)$/, ""),
-					nickname: "",
-					id: null,
+					type: ` + MESSAGE_TYPE_BALLOON + `,
+					message: text.textContent,
+					nickname: strong.textContent.replace(/\\(\\d+\\)$/, ""),
+					userId: parseInt(strong.textContent.match(/\\((\\d+)\\)$/)[1], 10),
 				});
 			}
 		} else if (children.item(i).getAttribute("class") === "run_area") {
 			var box = children.item(i).querySelector(".box");
 			messages.push({
-				type: "announce",
+				type: ` + MESSAGE_TYPE_ANNOUNCE + `,
 				message: (box === null) ? "メッセージを読めません。" : box.textContent,
 				nickname: "",
-				id: null,
+				userId: undefined,
 			});
 		}
 	}
@@ -304,8 +303,14 @@ window.setInterval(function() {
 		// 放送が再開された場合は、コメント欄がクリアされるので、 savannaTalkMessages もクリアする。
 		savannaTalkMessages.length = 0;
 	}
+	var channelId = undefined;
+	var match = location.href.match(/(\\d+)#?.*$/);
+	if (match) {
+		channelId = parseInt(match[1], 10);
+	}
 	var newMessages = [];
 	for (var i = savannaTalkMessages.length; i < messages.length; ++i) {
+		messages[i].channelId = channelId;
 		messages[i].timestamp = now;
 		newMessages.push(messages[i]);
 	}
@@ -313,11 +318,12 @@ window.setInterval(function() {
 	var newLikes = getLikes();
 	if (savannaTalkLikes < newLikes) {
 		specialMessages.push({
-			type: "likes",
+			channelId: channelId,
+			timestamp: now,
+			type: ` + MESSAGE_TYPE_LIKES + `,
 			message: "いいねされました。",
 			nickname: "",
-			id: null,
-			timestamp: now,
+			userId: undefined,
 		});
 	}
 	savannaTalkLikes = newLikes;
@@ -353,10 +359,12 @@ window.setInterval(function() {
 	private updateChatLogs(url: string): void {
 		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
 		chatLogs.innerHTML = "";
-		let channel: Channel = appModel.getChannel(url);
-		for (let i: number = 0; i < channel.messages.length; ++i) {
-			this.addMessageLog(channel.messages[i]);
+		let channelId: number = getChannelIdFromUrl(url);
+		if (channelId === undefined) {
+			return;
 		}
+		ipcRenderer.send("acquireChannelWriteLock", JSON.stringify({channelId: channelId}));
+		ipcRenderer.send("getChatLogs", JSON.stringify({channelId: channelId}));
 	}
 	private showLoadError(): void {
 		this.showErrorMessage("チャットを読み込めません。OKボタンを押してリロードしてみてください。");
@@ -390,19 +398,24 @@ window.setInterval(function() {
 	private addMessageLog(message: IMessage): void {
 		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
 		let chatLog: HTMLDivElement = document.createElement("div");
-		chatLog.setAttribute("class", "chatLog");
+		if (message.type === MESSAGE_TYPE_MESSAGE) {
+			chatLog.setAttribute("class", "chatLog");
+		} else {
+			chatLog.setAttribute("class", "chatLog chatSystemLog");
+		}
 		let timestamp: HTMLDivElement = document.createElement("div");
 		timestamp.setAttribute("class", "timestamp");
 		timestamp.appendChild(document.createTextNode(dateFormat(new Date(message.timestamp), "HH:MM:ss")));
 		chatLog.appendChild(timestamp);
 		let img: HTMLImageElement = document.createElement("img");
 		img.setAttribute("class", "image");
-		if (message.id !== null) {
+		if (message.userId !== undefined) {
 			img.addEventListener("error", () => {
 				img.src = this.getDefaultIconUrl();
 			});
-			let dir: number = ~~Math.floor(message.id / 1000000);
-			img.src = "http://usercontents.afreecatv.jp/LOGO/channel/" + dir + "/" + message.id + "/" + message.id + ".jpg";
+			let dir: number = ~~Math.floor(message.userId / 1000000);
+			img.src = "http://usercontents.afreecatv.jp/LOGO/channel/"
+				+ dir + "/" + message.userId + "/" + message.userId + ".jpg";
 		} else {
 			img.src = this.getDefaultIconUrl();
 		}

@@ -12,6 +12,7 @@ rm -rf pack/SavannaTalk-darwin-x64/
     --icon=resources/app.icns \
     --out pack --overwrite
 cp package.json pack/SavannaTalk-darwin-x64/SavannaTalk.app/Contents/Resources/app/
+cp -r node_modules/sqlite3/ pack/SavannaTalk-darwin-x64/resources/app/node_modules/
 pushd .
 cd pack/SavannaTalk-darwin-x64/
 rm ../SavannaTalk-darwin-x64.zip

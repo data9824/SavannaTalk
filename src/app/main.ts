@@ -3,6 +3,7 @@ import BrowserWindow = Electron.BrowserWindow;
 
 import * as electron from "electron";
 import * as _ from "lodash";
+import * as sqlite3 from "sqlite3";
 import IPCMain = Electron.IPCMain;
 import IPCMainEvent = Electron.IPCMainEvent;
 import {Socket} from "net";
@@ -11,11 +12,12 @@ import * as net from "net";
 import * as fs from "fs";
 
 interface IMessage {
-	type: string;
+	channelId: number;
+	timestamp: number;
+	type: number;
 	message: string;
 	nickname: string;
-	id: number;
-	timestamp: number;
+	userId: number;
 }
 
 interface IConfig {
@@ -29,10 +31,14 @@ interface IConfig {
 	readLikes: boolean;
 }
 
-const MESSAGE_TYPE_MESSAGE: string = "message";
-const MESSAGE_TYPE_BALLOON: string = "balloon";
-const MESSAGE_TYPE_ANNOUNCE: string = "announce";
-const MESSAGE_TYPE_LIKES: string = "likes";
+interface IGetChatLogsParam {
+	channelId: number;
+}
+
+const MESSAGE_TYPE_MESSAGE: number = 1;
+const MESSAGE_TYPE_BALLOON: number = 2;
+const MESSAGE_TYPE_ANNOUNCE: number = 3;
+const MESSAGE_TYPE_LIKES: number = 4;
 const defaultConfig: IConfig = {
 	version: 1,
 	channelUrl: "",
@@ -48,6 +54,8 @@ let dialog: Electron.Dialog = electron.dialog;
 let ipcMain: IPCMain = electron.ipcMain;
 let mainWindow: BrowserWindow = undefined;
 let config: IConfig;
+let channelLockFileDescriptor: number = undefined;
+let channelLockFilePath: string = undefined;
 
 function createWindow() {
 	'use strict';
@@ -87,11 +95,35 @@ function findFile(dir: string, fileName: string): string {
 	return undefined;
 }
 
+function unlockChannelLock(): void {
+	'use strict';
+	if (channelLockFileDescriptor !== undefined) {
+		fs.closeSync(channelLockFileDescriptor);
+		channelLockFileDescriptor = undefined;
+		fs.unlinkSync(channelLockFilePath);
+		channelLockFilePath = undefined;
+	}
+}
+
 function getConfigFileName(): string {
 	'use strict';
 	return app.getPath('userData') + "/config.json";
 }
 
+function getDatabaseFileName(): string {
+	'use strict';
+	return app.getPath('userData') + "/db.sqlite";
+}
+
+function getChannelLockFilePath(channelId: number): string {
+	'use strict';
+	if ("number" !== typeof channelId) {
+		return undefined;
+	}
+	return app.getPath('userData') + "/channel." + channelId.toString() +  ".lock";
+}
+
+sqlite3.verbose();
 if (process.platform === "darwin") {
 	let flashPlayerDll: string = findFile("/Applications//Google Chrome.app/Contents/Versions", "PepperFlashPlayer");
 	if (flashPlayerDll === undefined) {
@@ -114,6 +146,30 @@ if (process.platform === "darwin") {
 	app.commandLine.appendSwitch('ppapi-flash-path', flashPlayerDll);
 	app.commandLine.appendSwitch('ppapi-flash-version', manifest["version"]);
 }
+let db: sqlite3.Database = new sqlite3.Database(getDatabaseFileName(), sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err: Error) => {
+	if (err !== null) {
+		dialog.showErrorBox("エラー", "データベースを開けません。:" + err.name + " " + err.message);
+		app.quit();
+	}
+});
+db.serialize(() => {
+	db.run(
+		`CREATE TABLE IF NOT EXISTS chat (
+		id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+		channel_id INTEGER NOT NULL,
+		timestamp INTEGER NOT NULL,
+		type INTEGER NOT NULL,
+		nickname TEXT,
+		user_id INTEGER,
+		message TEXT
+		)`,
+		(err: Error) => {
+			if (err !== null) {
+				dialog.showErrorBox("エラー", "テーブルを作成できません。:" + err.name + " " + err.message);
+				app.quit();
+			}
+		});
+});
 app.on('ready', createWindow);
 app.on('window-all-closed', () => {
 	if (process.platform !== 'darwin') {
@@ -125,9 +181,25 @@ app.on('activate', () => {
 		createWindow();
 	}
 });
+app.on("quit", () => {
+	unlockChannelLock();
+});
 ipcMain.on("message", (event: IPCMainEvent, arg: string) => {
 	let messages: IMessage[] = JSON.parse(arg);
 	messages.forEach((message: IMessage) => {
+		if (channelLockFileDescriptor !== undefined) {
+			db.serialize(() => {
+				db.run(
+					"INSERT INTO chat (channel_id, timestamp, type, nickname, user_id, message) VALUES(?, ?, ?, ?, ?, ?)",
+					message.channelId, message.timestamp, message.type, message.nickname, message.userId, message.message,
+					(err: Error) => {
+						if (err !== null) {
+							mainWindow.webContents.send("error", "チャットを記録できません。:" + err.name + " " + err.message);
+						}
+					}
+				);
+			});
+		}
 		if (!config.readChat) {
 			return;
 		}
@@ -171,6 +243,46 @@ ipcMain.on("message", (event: IPCMainEvent, arg: string) => {
 				client.destroy();
 			});
 		});
+	});
+});
+ipcMain.on("acquireChannelWriteLock", (event: IPCMainEvent, arg: string) => {
+	let param: IGetChatLogsParam = JSON.parse(arg);
+	unlockChannelLock();
+	let path: string = getChannelLockFilePath(param.channelId);
+	if (path === undefined) {
+		return;
+	}
+	fs.open(path, "wx", (err: NodeJS.ErrnoException, fd: number) => {
+		if (err === null) {
+			channelLockFileDescriptor = fd;
+			channelLockFilePath = path;
+		} else {
+			mainWindow.webContents.send("error", "チャットを記録できません。このアプリを二重に起動して同じチャンネルを開いていないか確認してください。");
+		}
+	});
+});
+ipcMain.on("getChatLogs", (event: IPCMainEvent, arg: string) => {
+	let param: IGetChatLogsParam = JSON.parse(arg);
+	db.serialize(() => {
+		db.each(
+			"SELECT channel_id, timestamp, type, nickname, user_id, message FROM chat WHERE channel_id=? ORDER BY id",
+			param.channelId,
+			(err: Error, row: any) => {
+				if (err === null) {
+					let message: IMessage = {
+						channelId: row.channel_id,
+						timestamp: row.timestamp,
+						type: row.type,
+						message: row.message,
+						nickname: row.nickname,
+						userId: row.user_id,
+					};
+					event.sender.send("getChatLogs", JSON.stringify(message));
+				} else {
+					console.log(err);
+				}
+			}
+			);
 	});
 });
 ipcMain.on("setConfig", (event: IPCMainEvent, arg: string) => {
