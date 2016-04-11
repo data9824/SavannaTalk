@@ -55,7 +55,6 @@ let ipcMain: IPCMain = electron.ipcMain;
 let mainWindow: BrowserWindow = undefined;
 let config: IConfig;
 let channelLockFileDescriptor: number = undefined;
-let channelLockFilePath: string = undefined;
 
 function createWindow() {
 	'use strict';
@@ -100,8 +99,6 @@ function unlockChannelLock(): void {
 	if (channelLockFileDescriptor !== undefined) {
 		fs.closeSync(channelLockFileDescriptor);
 		channelLockFileDescriptor = undefined;
-		fs.unlinkSync(channelLockFilePath);
-		channelLockFilePath = undefined;
 	}
 }
 
@@ -173,6 +170,7 @@ db.serialize(() => {
 app.on('ready', createWindow);
 app.on('window-all-closed', () => {
 	if (process.platform !== 'darwin') {
+		unlockChannelLock();
 		app.quit();
 	}
 });
@@ -255,7 +253,7 @@ ipcMain.on("acquireChannelWriteLock", (event: IPCMainEvent, arg: string) => {
 	fs.open(path, "wx", (err: NodeJS.ErrnoException, fd: number) => {
 		if (err === null) {
 			channelLockFileDescriptor = fd;
-			channelLockFilePath = path;
+			fs.unlinkSync(path);
 		} else {
 			mainWindow.webContents.send("error", "チャットを記録できません。このアプリを二重に起動して同じチャンネルを開いていないか確認してください。");
 		}
