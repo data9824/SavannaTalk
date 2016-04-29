@@ -19,6 +19,7 @@ const MESSAGE_TYPE_MESSAGE: number = 1;
 const MESSAGE_TYPE_BALLOON: number = 2;
 const MESSAGE_TYPE_ANNOUNCE: number = 3;
 const MESSAGE_TYPE_LIKES: number = 4;
+const MESSAGE_TYPE_VIEWER: number = 5;
 const scrollDuration: number = 100;
 
 interface IMessage {
@@ -37,8 +38,11 @@ interface IConfig {
 	readMessage: boolean;
 	readBalloon: boolean;
 	readAnnounce: boolean;
+	readViewer: boolean;
 	readNickname: boolean;
 	readLikes: boolean;
+	showViewer: boolean;
+	showLikes: boolean;
 }
 
 function getChannelIdFromUrl(url: string): number {
@@ -95,6 +99,14 @@ function getChannelIdFromUrl(url: string): number {
 				</div>
 			</div>
 			<div class="mdl-tabs__panel" id="settings-panel">
+				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="showViewer">
+					<input type="checkbox" id="showViewer" class="mdl-checkbox__input" v-model="showViewer" v-on:change="changeConfig">
+					<span class="mdl-checkbox__label">入退場を表示する</span>
+				</label>
+				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="showLikes">
+					<input type="checkbox" id="showLikes" class="mdl-checkbox__input" v-model="showLikes" v-on:change="changeConfig">
+					<span class="mdl-checkbox__label">いいねを表示する</span>
+				</label>
 				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="readMessage">
 					<input type="checkbox" id="readMessage" class="mdl-checkbox__input" v-model="readMessage" v-on:change="changeConfig">
 					<span class="mdl-checkbox__label">ユーザーメッセージを読む</span>
@@ -105,7 +117,11 @@ function getChannelIdFromUrl(url: string): number {
 				</label>
 				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="readAnnounce">
 					<input type="checkbox" id="readAnnounce" class="mdl-checkbox__input" v-model="readAnnounce" v-on:change="changeConfig">
-					<span class="mdl-checkbox__label">入場アナウンスなどを読む</span>
+					<span class="mdl-checkbox__label">アナウンスを読む</span>
+				</label>
+				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="readViewer">
+					<input type="checkbox" id="readViewer" class="mdl-checkbox__input" v-model="readViewer" v-on:change="changeConfig">
+					<span class="mdl-checkbox__label">入退場を読む</span>
 				</label>
 				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="readNickname">
 					<input type="checkbox" id="readNickname" class="mdl-checkbox__input" v-model="readNickname" v-on:change="changeConfig">
@@ -129,8 +145,11 @@ class LoginView extends Vue {
 	private readMessage: boolean;
 	private readBalloon: boolean;
 	private readAnnounce: boolean;
+	private readViewer: boolean;
 	private readNickname: boolean;
 	private readLikes: boolean;
+	private showViewer: boolean;
+	private showLikes: boolean;
 	private post: string;
 	private autoScroll: boolean;
 	private scrollStartTime: number;
@@ -146,8 +165,11 @@ class LoginView extends Vue {
 			readMessage: false,
 			readBalloon: false,
 			readAnnounce: false,
+			readViewer: false,
 			readNickname: false,
 			readLikes: false,
+			showViewer: false,
+			showLikes: false,
 			post: "",
 			autoScroll: true,
 		};
@@ -164,8 +186,11 @@ class LoginView extends Vue {
 			readMessage: this.readMessage,
 			readBalloon: this.readBalloon,
 			readAnnounce: this.readAnnounce,
+			readViewer: this.readViewer,
 			readNickname: this.readNickname,
 			readLikes: this.readLikes,
+			showViewer: this.showViewer,
+			showLikes: this.showLikes,
 		};
 		ipcRenderer.send("setConfig", JSON.stringify(config));
 	}
@@ -210,14 +235,20 @@ class LoginView extends Vue {
 			this.readMessage = config.readMessage;
 			this.readBalloon = config.readBalloon;
 			this.readAnnounce = config.readAnnounce;
+			this.readViewer = config.readViewer;
 			this.readNickname = config.readNickname;
 			this.readLikes = config.readLikes;
+			this.showViewer = config.showViewer;
+			this.showLikes = config.showLikes;
 			this.updateCheck(document.getElementById("readChat"), this.readChat);
 			this.updateCheck(document.getElementById("readMessage"), this.readMessage);
 			this.updateCheck(document.getElementById("readBalloon"), this.readBalloon);
 			this.updateCheck(document.getElementById("readAnnounce"), this.readAnnounce);
+			this.updateCheck(document.getElementById("readViewer"), this.readViewer);
 			this.updateCheck(document.getElementById("readNickname"), this.readNickname);
 			this.updateCheck(document.getElementById("readLikes"), this.readLikes);
+			this.updateCheck(document.getElementById("showViewer"), this.showViewer);
+			this.updateCheck(document.getElementById("showLikes"), this.showLikes);
 		});
 		ipcRenderer.on("getChatLogs", (e: any, arg: string) => {
 			let message: IMessage = JSON.parse(arg);
@@ -249,9 +280,20 @@ function getLikes() {
 		return 0;
 	}
 }
+function difference(x, y) {
+	var result = {};
+	Object.keys(x).forEach((key) => {
+		if (!(key in y)) {
+			result[key] = x[key];
+		}
+	});
+	return result;
+}
 var savannaTalkIpcRenderer = require('electron').ipcRenderer;
 var savannaTalkMessages = [];
 var savannaTalkLikes = getLikes();
+var savannaTalkViewers = {};
+var savannaTalkLastViewerCheckTime = Date.now();
 window.setInterval(function() {
 	var now = Date.now();
 	var iframe = document.getElementById('frameChat');
@@ -326,6 +368,43 @@ window.setInterval(function() {
 			userId: undefined,
 		});
 	}
+	if (now - savannaTalkLastViewerCheckTime > 1000) {
+		savannaTalkLastViewerCheckTime = now;
+		var list = iframe.contentWindow.chatInterface.send({channel: {cmd:"userList"}});
+		if (list !== null) {
+			var viewers = {};
+			Object.keys(list.channel.data).forEach((key) => {
+				list.channel.data[key].forEach((user) => {
+					viewers[parseInt(user.id.match(/^(\\d+)/)[1], 10)] = user.nickname;
+				});
+			});
+			if (Object.keys(savannaTalkViewers).length !== 0) {
+				var enteredViewers = difference(viewers, savannaTalkViewers);
+				var leftViewers = difference(savannaTalkViewers, viewers);
+				Object.keys(enteredViewers).forEach((key) => {
+					specialMessages.push({
+						channelId: channelId,
+						timestamp: now,
+						type: ` + MESSAGE_TYPE_VIEWER + `,
+						message: "チャットに入場しました。",
+						nickname: enteredViewers[key],
+						userId: key,
+					});
+				});
+				Object.keys(leftViewers).forEach((key) => {
+					specialMessages.push({
+						channelId: channelId,
+						timestamp: now,
+						type: ` + MESSAGE_TYPE_VIEWER + `,
+						message: "チャットから退場しました。",
+						nickname: leftViewers[key],
+						userId: key,
+					});
+				});
+			}
+			savannaTalkViewers = viewers;
+		}
+	}
 	savannaTalkLikes = newLikes;
 	savannaTalkIpcRenderer.sendToHost("message", JSON.stringify(newMessages.concat(specialMessages)));
 	savannaTalkMessages = savannaTalkMessages.concat(newMessages);
@@ -396,6 +475,12 @@ window.setInterval(function() {
 		return "images/transparent.png";
 	}
 	private addMessageLog(message: IMessage): void {
+		if (!this.showViewer && message.type === MESSAGE_TYPE_VIEWER) {
+			return;
+		}
+		if (!this.showLikes && message.type === MESSAGE_TYPE_LIKES) {
+			return;
+		}
 		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
 		let chatLog: HTMLDivElement = document.createElement("div");
 		if (message.type === MESSAGE_TYPE_MESSAGE) {

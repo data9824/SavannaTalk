@@ -27,8 +27,11 @@ interface IConfig {
 	readMessage: boolean;
 	readBalloon: boolean;
 	readAnnounce: boolean;
+	readViewer: boolean;
 	readNickname: boolean;
 	readLikes: boolean;
+	showViewer: boolean;
+	showLikes: boolean;
 }
 
 interface IGetChatLogsParam {
@@ -39,6 +42,7 @@ const MESSAGE_TYPE_MESSAGE: number = 1;
 const MESSAGE_TYPE_BALLOON: number = 2;
 const MESSAGE_TYPE_ANNOUNCE: number = 3;
 const MESSAGE_TYPE_LIKES: number = 4;
+const MESSAGE_TYPE_VIEWER: number = 5;
 const defaultConfig: IConfig = {
 	version: 1,
 	channelUrl: "",
@@ -46,8 +50,11 @@ const defaultConfig: IConfig = {
 	readMessage: true,
 	readBalloon: true,
 	readAnnounce: true,
+	readViewer: false,
 	readNickname: false,
 	readLikes: true,
+	showViewer: true,
+	showLikes: true,
 };
 let app: Electron.App = electron.app;
 let dialog: Electron.Dialog = electron.dialog;
@@ -210,6 +217,9 @@ ipcMain.on("message", (event: IPCMainEvent, arg: string) => {
 		if ((!config.readAnnounce) && message.type === MESSAGE_TYPE_ANNOUNCE) {
 			return;
 		}
+		if ((!config.readViewer) && message.type === MESSAGE_TYPE_VIEWER) {
+			return;
+		}
 		if ((!config.readLikes) && message.type === MESSAGE_TYPE_LIKES) {
 			return;
 		}
@@ -225,8 +235,10 @@ ipcMain.on("message", (event: IPCMainEvent, arg: string) => {
 			} else {
 				text = text.replace(/https?:\/\/[\-_\.!~*'\(\)a-zA-Z0-9;/\?:@&=\+\$,%#]+/g, "(URL省略)");
 			}
-			if (config.readNickname) {
-				text += " " + message.nickname;
+			if (config.readNickname ||
+				message.type === MESSAGE_TYPE_VIEWER ||
+				message.type === MESSAGE_TYPE_BALLOON) {
+				text = text.replace(/。$/, "") + " " + message.nickname;
 			}
 			let textBuffer: Buffer = new Buffer(text, 'utf8');
 			let headerBuffer: Buffer = new Buffer(15);
@@ -263,8 +275,9 @@ ipcMain.on("getChatLogs", (event: IPCMainEvent, arg: string) => {
 	let param: IGetChatLogsParam = JSON.parse(arg);
 	db.serialize(() => {
 		db.each(
-			"SELECT channel_id, timestamp, type, nickname, user_id, message FROM chat WHERE channel_id=? ORDER BY id",
+			"SELECT channel_id, timestamp, type, nickname, user_id, message FROM chat WHERE channel_id=? AND timestamp>=? ORDER BY id",
 			param.channelId,
+			Date.now() - 1000 * 60 * 60 * 24 * 7,
 			(err: Error, row: any) => {
 				if (err === null) {
 					let message: IMessage = {

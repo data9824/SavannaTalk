@@ -54,8 +54,9 @@ webview {
 }
 
 .chatLogs {
-	height: calc(100% - 3em);
+	height: calc(100% - 3rem);
 	overflow-y: scroll;
+	line-height: 1.1em;
 }
 
 .postForm {
