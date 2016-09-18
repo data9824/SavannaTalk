@@ -197,7 +197,10 @@ class LoginView extends Vue {
 	public inputUrl(): void {
 		this.changeConfig();
 		let webview: any = this.$els['webview'];
-		webview.setAttribute("src", this.channelUrl);
+		webview.executeJavaScript(`
+			window.removeEventListener("beforeunload", onBeforeUnload);
+		`);
+		webview.setAttribute("src", 'webview.html?' + encodeURIComponent(this.channelUrl));
 	}
 	public onPost(): void {
 		let webview: any = this.$els['webview'];
@@ -272,7 +275,7 @@ class LoginView extends Vue {
 			this.updateChatLogs(webview.getURL());
 			let guestJs: string = `
 function getLikes() {
-	var likecnt = document.getElementById('likecnt');
+	var likecnt = document.getElementById("iframe").contentWindow.document.getElementById('like_cnt');
 	if (likecnt) {
 		var result = parseInt(likecnt.textContent.replace(/[^0-9]/g, ""));
 		return isNaN(result) ? 0 : result;
@@ -296,12 +299,15 @@ var savannaTalkViewers = {};
 var savannaTalkLastViewerCheckTime = Date.now();
 window.setInterval(function() {
 	var now = Date.now();
-	var iframe = document.getElementById('frameChat');
+	var iframe = document.getElementById("iframe").contentWindow.document.getElementById('frameChat');
 	if (iframe === null) {
 		return;
 	}
 	var messages = [];
 	var chatOutput = iframe.contentWindow.document.querySelector("#chatOutput");
+	if (chatOutput === null) {
+		return;
+	}
 	var children = chatOutput.children;
 	for (var i = 1; i < children.length; ++i) { // starts from 1 to skip the first welcome message
 		if (children.item(i).tagName.toLowerCase() === "dl") {
@@ -415,13 +421,6 @@ window.setInterval(function() {
 				clearTimeout(this.errorTimerId);
 				this.errorTimerId = undefined;
 			}
-		});
-		webview.addEventListener("did-navigate", (event: any) => {
-			this.updateUrl(event.url);
-		});
-		webview.addEventListener("did-navigate-in-page", (event: any) => {
-			// for redirect
-			this.updateUrl(event.url);
 		});
 	}
 	public detached(): void {
