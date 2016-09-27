@@ -31,6 +31,11 @@ interface IMessage {
 	userId: number;
 }
 
+interface IStatus {
+	viewers: number;
+	likes: number;
+}
+
 interface IConfig {
 	version: number;
 	channelUrl: string;
@@ -43,6 +48,7 @@ interface IConfig {
 	readLikes: boolean;
 	showViewer: boolean;
 	showLikes: boolean;
+	fontSize: number;
 }
 
 function getChannelIdFromUrl(url: string): number {
@@ -99,6 +105,7 @@ function getChannelIdFromUrl(url: string): number {
 				</div>
 			</div>
 			<div class="mdl-tabs__panel" id="settings-panel">
+				<div>バージョン 20160928</div>
 				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="showViewer">
 					<input type="checkbox" id="showViewer" class="mdl-checkbox__input" v-model="showViewer" v-on:change="changeConfig">
 					<span class="mdl-checkbox__label">入退場を表示する</span>
@@ -109,7 +116,7 @@ function getChannelIdFromUrl(url: string): number {
 				</label>
 				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="readMessage">
 					<input type="checkbox" id="readMessage" class="mdl-checkbox__input" v-model="readMessage" v-on:change="changeConfig">
-					<span class="mdl-checkbox__label">ユーザーメッセージを読む</span>
+					<span class="mdl-checkbox__label">チャットを読む</span>
 				</label>
 				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="readBalloon">
 					<input type="checkbox" id="readBalloon" class="mdl-checkbox__input" v-model="readBalloon" v-on:change="changeConfig">
@@ -131,6 +138,11 @@ function getChannelIdFromUrl(url: string): number {
 					<input type="checkbox" id="readLikes" class="mdl-checkbox__input" v-model="readLikes" v-on:change="changeConfig">
 					<span class="mdl-checkbox__label">いいねを読む</span>
 				</label>
+				<div>文字サイズ</div>
+				<div class="mdl-textfield mdl-js-textfield">
+					<input class="mdl-textfield__input" type="text" placeholder="文字サイズ" id="fontSize" v-model="fontSize" v-on:change="changeConfig">
+					<label class="mdl-textfield__label" for="fontSize"></label>
+				</div>
 			</div>
 		</div>
 		<div id="toastContainer" class="mdl-js-snackbar mdl-snackbar">
@@ -150,6 +162,7 @@ class LoginView extends Vue {
 	private readLikes: boolean;
 	private showViewer: boolean;
 	private showLikes: boolean;
+	private fontSize: number;
 	private post: string;
 	private autoScroll: boolean;
 	private scrollStartTime: number;
@@ -170,6 +183,7 @@ class LoginView extends Vue {
 			readLikes: false,
 			showViewer: false,
 			showLikes: false,
+			fontSize: 0,
 			post: "",
 			autoScroll: true,
 		};
@@ -191,8 +205,10 @@ class LoginView extends Vue {
 			readLikes: this.readLikes,
 			showViewer: this.showViewer,
 			showLikes: this.showLikes,
+			fontSize: this.fontSize,
 		};
 		ipcRenderer.send("setConfig", JSON.stringify(config));
+		this.updateView();
 	}
 	public inputUrl(): void {
 		this.changeConfig();
@@ -209,7 +225,7 @@ class LoginView extends Vue {
 		}
 		let guestJs: string = `
 			(function() {
-				var iframe = document.getElementById('frameChat');
+				var iframe = document.getElementById("iframe").contentWindow.document.getElementById('frameChat');
 				if (!iframe) {
 					window.alert("frameChatが見つかりません。");
 					return;
@@ -243,6 +259,7 @@ class LoginView extends Vue {
 			this.readLikes = config.readLikes;
 			this.showViewer = config.showViewer;
 			this.showLikes = config.showLikes;
+			this.fontSize = config.fontSize;
 			this.updateCheck(document.getElementById("readChat"), this.readChat);
 			this.updateCheck(document.getElementById("readMessage"), this.readMessage);
 			this.updateCheck(document.getElementById("readBalloon"), this.readBalloon);
@@ -252,6 +269,7 @@ class LoginView extends Vue {
 			this.updateCheck(document.getElementById("readLikes"), this.readLikes);
 			this.updateCheck(document.getElementById("showViewer"), this.showViewer);
 			this.updateCheck(document.getElementById("showLikes"), this.showLikes);
+			this.updateView();
 		});
 		ipcRenderer.on("getChatLogs", (e: any, arg: string) => {
 			let message: IMessage = JSON.parse(arg);
@@ -264,11 +282,16 @@ class LoginView extends Vue {
 		ipcRenderer.send("getConfig");
 		let webview: any = this.$els['webview'];
 		webview.addEventListener('ipc-message', (event: any) => {
-			let messages: IMessage[] = JSON.parse(event.args[0]);
-			messages.forEach((message: IMessage) => {
-				this.addMessageLog(message);
-			});
-			ipcRenderer.send("message", event.args[0]);
+			if (event.channel === "message") {
+				let messages: IMessage[] = JSON.parse(event.args[0]);
+				messages.forEach((message: IMessage) => {
+					this.addMessageLog(message);
+				});
+				ipcRenderer.send("message", event.args[0]);
+			} else if (event.channel === "status") {
+				let status: IStatus = JSON.parse(event.args[0]);
+				document.title = "SavannaTalk 来場者数(" + status.viewers + ") いいね(" + status.likes + ")";
+			}
 		});
 		webview.addEventListener("did-finish-load", () => {
 			// webview.openDevTools();
@@ -278,6 +301,15 @@ function getLikes() {
 	var likecnt = document.getElementById("iframe").contentWindow.document.getElementById('like_cnt');
 	if (likecnt) {
 		var result = parseInt(likecnt.textContent.replace(/[^0-9]/g, ""));
+		return isNaN(result) ? 0 : result;
+	} else {
+		return 0;
+	}
+}
+function getViewers() {
+	var liveViewer = document.getElementById("iframe").contentWindow.document.getElementById("live_viewer");
+	if (liveViewer) {
+		var result = parseInt(liveViewer.textContent.replace(/[^0-9]/g, ""));
 		return isNaN(result) ? 0 : result;
 	} else {
 		return 0;
@@ -414,6 +446,10 @@ window.setInterval(function() {
 	savannaTalkLikes = newLikes;
 	savannaTalkIpcRenderer.sendToHost("message", JSON.stringify(newMessages.concat(specialMessages)));
 	savannaTalkMessages = savannaTalkMessages.concat(newMessages);
+	savannaTalkIpcRenderer.sendToHost("status", JSON.stringify({
+		likes: getLikes(),
+		viewers: getViewers(),
+	}));
 }, 100);
 `;
 			webview.executeJavaScript(guestJs);
@@ -433,6 +469,10 @@ window.setInterval(function() {
 			this.errorTimerId = undefined;
 		}
 		this.errorTimerId = setTimeout(this.showLoadError.bind(this), 5000);
+	}
+	private updateView(): void {
+		let chatLogs: HTMLDivElement = this.$els["chatlogs"];
+		chatLogs.style.fontSize = this.fontSize + "pt";
 	}
 	private updateChatLogs(url: string): void {
 		let chatLogs: HTMLDivElement = this.$els["chatlogs"];

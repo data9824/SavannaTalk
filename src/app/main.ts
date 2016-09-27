@@ -32,6 +32,7 @@ interface IConfig {
 	readLikes: boolean;
 	showViewer: boolean;
 	showLikes: boolean;
+	fontSize: number;
 }
 
 interface IGetChatLogsParam {
@@ -55,6 +56,7 @@ const defaultConfig: IConfig = {
 	readLikes: true,
 	showViewer: true,
 	showLikes: true,
+	fontSize: 10.5,
 };
 let app: Electron.App = electron.app;
 let dialog: Electron.Dialog = electron.dialog;
