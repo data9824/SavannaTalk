@@ -1,15 +1,17 @@
-/// <reference path="../../typings/browser.d.ts" />
+/// <reference path="../../typings/index.d.ts" />
+/// <reference path="./nodobjc.d.ts" />
 import BrowserWindow = Electron.BrowserWindow;
 
 import * as electron from "electron";
 import * as _ from "lodash";
 import * as sqlite3 from "sqlite3";
-import IPCMain = Electron.IPCMain;
-import IPCMainEvent = Electron.IPCMainEvent;
+import IPCMain = Electron.IpcMain;
+import IPCMainEvent = Electron.IpcMainEvent;
 import {Socket} from "net";
 import {Stats} from "fs";
 import * as net from "net";
 import * as fs from "fs";
+import * as nodobjc from "nodobjc";
 
 interface IMessage {
 	channelId: number;
@@ -129,7 +131,48 @@ function getChannelLockFilePath(channelId: number): string {
 	return app.getPath('userData') + "/channel." + channelId.toString() +  ".lock";
 }
 
+function speakMac(text: string): void {
+	let autoreleasePool: any = nodobjc.NSAutoreleasePool('alloc')('init');
+	let processName: any = nodobjc.NSString('stringWithUTF8String', 'com.yukkuroid.rpc');
+	let host: any = nodobjc.NSString('stringWithUTF8String', '');
+	let proxy: any = nodobjc.NSConnection('rootProxyForConnectionWithRegisteredName', processName, 'host', host);
+	if (proxy === null) {
+		mainWindow.webContents.send("error", "ゆっくろいどに接続できません。ゆっくろいどが起動していることを確認してください。");
+		autoreleasePool('drain');
+		return;
+	}
+	proxy('setKanjiText', nodobjc.NSString('stringWithUTF8String', text));
+	proxy('pushPlayButton', 0);
+	autoreleasePool('drain');
+}
+
+function speakWin(text: string): void {
+	let client: Socket = new net.Socket();
+	client.setEncoding('binary');
+	client.on("error", () => {
+		mainWindow.webContents.send("error", "棒読みちゃんに接続できません。棒読みちゃんが起動していることを確認してください。");
+	});
+	client.connect(50001, "localhost", () => {
+		let textBuffer: Buffer = new Buffer(text, 'utf8');
+		let headerBuffer: Buffer = new Buffer(15);
+		headerBuffer.writeUInt16LE(0x0001, 0); // command
+		headerBuffer.writeUInt16LE(0xFFFF, 2); // speed
+		headerBuffer.writeUInt16LE(0xFFFF, 4); // tone
+		headerBuffer.writeUInt16LE(0xFFFF, 6); // volume
+		headerBuffer.writeUInt16LE(0x0000, 8); // voice
+		headerBuffer.writeUInt8(0x00, 10); // charset
+		headerBuffer.writeUInt32LE(textBuffer.length, 11); // length
+		client.write(headerBuffer.toString('binary') + textBuffer.toString('binary'), 'binary', () => {
+			client.destroy();
+		});
+	});
+}
+
 sqlite3.verbose();
+if (process.platform === "darwin") {
+	nodobjc.import('Foundation');
+	nodobjc.import('Cocoa');
+}
 if (process.platform === "darwin") {
 	let flashPlayerDll: string = findFile("/Applications//Google Chrome.app/Contents/Versions", "PepperFlashPlayer");
 	if (flashPlayerDll === undefined) {
@@ -225,36 +268,22 @@ ipcMain.on("message", (event: IPCMainEvent, arg: string) => {
 		if ((!config.readLikes) && message.type === MESSAGE_TYPE_LIKES) {
 			return;
 		}
-		let client: Socket = new net.Socket();
-		client.setEncoding('binary');
-		client.on("error", () => {
-			mainWindow.webContents.send("error", "棒読みちゃんに接続できません。棒読みちゃんが起動していることを確認してください。");
-		});
-		client.connect(50001, "localhost", () => {
-			let text: string = message.message;
-			if (message.type === MESSAGE_TYPE_LIKES) {
-				text = "Eねされました。";
-			} else {
-				text = text.replace(/https?:\/\/[\-_\.!~*'\(\)a-zA-Z0-9;/\?:@&=\+\$,%#]+/g, "(URL省略)");
-			}
-			if (config.readNickname ||
-				message.type === MESSAGE_TYPE_VIEWER ||
-				message.type === MESSAGE_TYPE_BALLOON) {
-				text = text.replace(/。$/, "") + " " + message.nickname;
-			}
-			let textBuffer: Buffer = new Buffer(text, 'utf8');
-			let headerBuffer: Buffer = new Buffer(15);
-			headerBuffer.writeUInt16LE(0x0001, 0); // command
-			headerBuffer.writeUInt16LE(0xFFFF, 2); // speed
-			headerBuffer.writeUInt16LE(0xFFFF, 4); // tone
-			headerBuffer.writeUInt16LE(0xFFFF, 6); // volume
-			headerBuffer.writeUInt16LE(0x0000, 8); // voice
-			headerBuffer.writeUInt8(0x00, 10); // charset
-			headerBuffer.writeUInt32LE(textBuffer.length, 11); // length
-			client.write(headerBuffer.toString('binary') + textBuffer.toString('binary'), 'binary', () => {
-				client.destroy();
-			});
-		});
+		let text: string = message.message;
+		if (message.type === MESSAGE_TYPE_LIKES) {
+			text = "Eねされました。";
+		} else {
+			text = text.replace(/https?:\/\/[\-_\.!~*'\(\)a-zA-Z0-9;/\?:@&=\+\$,%#]+/g, "(URL省略)");
+		}
+		if (config.readNickname ||
+			message.type === MESSAGE_TYPE_VIEWER ||
+			message.type === MESSAGE_TYPE_BALLOON) {
+			text = text.replace(/。$/, "") + " " + message.nickname;
+		}
+		if (process.platform === "darwin") {
+			speakMac(text);
+		} else {
+			speakWin(text);
+		}
 	});
 });
 ipcMain.on("acquireChannelWriteLock", (event: IPCMainEvent, arg: string) => {

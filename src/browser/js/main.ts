@@ -1,4 +1,4 @@
-/// <reference path="../../../typings/browser.d.ts" />
+/// <reference path="../../../typings/index.d.ts" />
 /// <reference path="../../../node_modules/vue-class-component/index.d.ts" />
 
 import * as Vue from 'vue';
@@ -105,7 +105,7 @@ function getChannelIdFromUrl(url: string): number {
 				</div>
 			</div>
 			<div class="mdl-tabs__panel" id="settings-panel">
-				<div>バージョン 20160928</div>
+				<div>バージョン 20160929</div>
 				<label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="showViewer">
 					<input type="checkbox" id="showViewer" class="mdl-checkbox__input" v-model="showViewer" v-on:change="changeConfig">
 					<span class="mdl-checkbox__label">入退場を表示する</span>

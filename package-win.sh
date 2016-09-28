@@ -1,7 +1,7 @@
 #!/bin/bash
 
 rm -rf release/SavannaTalk-win32-x64/
-./node_modules/.bin/electron-packager . SavannaTalk --platform=win32 --arch=x64 --version=1.3.5 \
+./node_modules/.bin/electron-packager . SavannaTalk --platform=win32 --arch=x64 --version=1.4.1 \
     --ignore=release --ignore=src --ignore=typings --ignore=build --ignore=.idea --ignore=resources \
 		--icon=resources/app.ico \
     --version-string.FileDescription=SavannaTalk \
